@@ -114,18 +114,37 @@ class Operation:
         # Run the original view function
         resp = self.view_func(*args, **kwargs)
 
+        response_code_matches = {}
+
         # Find model and response code for the returned object
         for code, model in self.responses.items():
             # if the mode is some generic with specified type
             # e.g. list[str], dict[str, Response], etc, we can't use isinstance and
             # at first need to get the unspecified generic type - e.g. list, dict, etc
             # TODO match also the inner types of generics - but that's a corner case
-            if isinstance(resp, get_origin(model.type_) or model.type_):
-                # hotfix: if the resp is str we shouldn't use jsonify as it
-                # changes the response adding additional characters.
-                if isinstance(resp, str):
-                    return resp, code
-                return jsonify(self.serialize(resp)), code
+            model_type = get_origin(model.type_) or model.type_
+            is_subclass = isinstance(resp, model_type)
+            is_exact_type = (
+                type(resp) == model_type  # pylint:disable=unidiomatic-typecheck
+            )
+
+            if is_subclass or is_exact_type:
+                match_key = (is_subclass, is_exact_type)
+                if match_key not in response_code_matches:
+                    response_code_matches[match_key] = code
+                else:
+                    raise ApiConfigError(
+                        f"Multiple response schemas match returned type {type(resp)}"
+                    )
+
+        if response_code_matches:
+            sorted_match_keys = sorted(response_code_matches.keys(), reverse=True)
+            code = response_code_matches[sorted_match_keys[0]]
+            # hotfix: if the resp is str we shouldn't use jsonify as it
+            # changes the response adding additional characters.
+            if isinstance(resp, str):
+                return resp, code
+            return jsonify(self.serialize(resp)), code
 
         raise ApiConfigError(f"No response schema matches returned type {type(resp)}")
 

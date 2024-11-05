@@ -1,8 +1,10 @@
 # pylint: disable=unused-argument
 import json
+from typing import Union
 
 import pytest
 from flask import Flask
+from pydantic import BaseModel
 
 from flask_ninja.api import NinjaAPI, Server
 from flask_ninja.router import Router
@@ -113,3 +115,31 @@ def test_api_custom_prefix_and_docs_url():
     assert (
         api.router.app.test_client().get("/prefix/ui/openapi.json").status_code == 200  # type: ignore
     )
+
+
+def test_api_get_inheritance(api):
+    class Response200(BaseModel):
+        status: str
+
+    class Response400(Response200):
+        pass
+
+    @api.get("/endpoint_api_get", responses={200: Response200, 400: Response400})
+    def endpoint_api_get() -> Union[Response200, Response400]:
+        return Response400(status="error")
+
+    resp = api.router.app.test_client().get("/endpoint_api_get")
+    assert resp.status_code == 400
+    assert resp.json == {"status": "error"}
+
+
+def test_api_get_ambiguous_response_code(api):
+    class Response(BaseModel):
+        status: str
+
+    @api.get("/endpoint_api_get", responses={200: Response, 400: Response})
+    def endpoint_api_get() -> Response:
+        return Response(status="error")
+
+    resp = api.router.app.test_client().get("/endpoint_api_get")
+    assert resp.status_code == 500
