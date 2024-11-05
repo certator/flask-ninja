@@ -10,7 +10,7 @@ from flask import jsonify, request
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .constants import NOT_SET, ApiConfigError, ParamType
-from .model_field import FieldMapping, ModelField, Undefined
+from .model_field import FieldMapping, ModelField, Undefined, UnionType
 from .models import MediaType
 from .models import Operation as OAPIOperation
 from .models import (
@@ -158,7 +158,7 @@ class Operation:
 
         # Check if for each returned type there is implicitly or explicitly defined response model and code
         if func_return_type:
-            if get_origin(func_return_type) == Union:
+            if get_origin(func_return_type) in [Union, UnionType]:
                 for ret_type in func_return_type.__args__:
                     if not any(resp.type_ != ret_type for resp in responses.values()):
                         raise ApiConfigError(
@@ -217,14 +217,18 @@ class Operation:
             parameters.append(parameter)
 
         schema = OAPIOperation(
-            requestBody=RequestBody(
-                content={
-                    "application/json": MediaType(schema_=request_body)  # type:ignore
-                },
-                required=True,
-            )
-            if request_body
-            else None,
+            requestBody=(
+                RequestBody(
+                    content={
+                        "application/json": MediaType(
+                            schema_=request_body  # type:ignore
+                        )
+                    },
+                    required=True,
+                )
+                if request_body
+                else None
+            ),
             parameters=parameters or None,
             responses={
                 str(code): Response(description=description)

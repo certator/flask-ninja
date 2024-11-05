@@ -152,7 +152,7 @@ class MediaType(BaseModel):
 class ParameterBase(BaseModel):
     description: Optional[str] = None
     required: Optional[bool] = None
-    deprecated: Optional[bool] = None
+    deprecated: Union[Any, str, bool, None] = None
     # Serialization rules for simple scenarios
     style: Optional[str] = None
     explode: Optional[bool] = None
